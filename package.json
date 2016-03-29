@@ -20,7 +20,8 @@
   "devDependencies": {
     "eslint": "^1.7.3",
     "eslint-config-mourner": "^1.0.1",
-    "simpleheat": "~0.2.0",
+    "simpleheat": "file:../simpleheat",
+    "rainbowvis.js": "^1.0.1",
     "uglify-js": "^2.5.0"
   },
   "eslintConfig": {

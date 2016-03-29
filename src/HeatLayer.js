@@ -117,7 +117,29 @@ L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
         this._redraw();
     },
 
+    _metresPerPixel: function (lat, zoomLevel) {
+      // Converts from degrees to radians.
+      Math.radians = function(degrees) {
+        return degrees * Math.PI / 180;
+      };
+
+      // Converts from radians to degrees.
+      Math.degrees = function(radians) {
+        return radians * 180 / Math.PI;
+      };
+      var C = 40075016.686 / 256; // 256 is the width of a map tile
+      var cosRes = Math.degrees(Math.cos(Math.radians(lat)))
+      return C * cosRes / Math.pow(2,(zoomLevel+8))
+    },
+
     _redraw: function () {
+        var pixelPerMeter =  this._metresPerPixel(this._latlngs[0][0], this._map.getZoom())
+        //console.log(pixelPerMeter);
+        var prut = 10 *(1 / pixelPerMeter);
+        //console.log(prut);
+        //this.options.radius = prut;
+        //console.log(this._map.getZoom());
+        this._updateOptions();
         var data = [],
             r = this._heat._r,
             size = this._map.getSize(),
@@ -127,7 +149,8 @@ L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
 
             max = this.options.max === undefined ? 1 : this.options.max,
             maxZoom = this.options.maxZoom === undefined ? this._map.getMaxZoom() : this.options.maxZoom,
-            v = 1 / Math.pow(2, Math.max(0, Math.min(maxZoom - this._map.getZoom(), 12))),
+            //v = 1 / Math.pow(2, Math.max(0, Math.min(maxZoom - this._map.getZoom(), 12))),
+            v = 1,
             cellSize = r / 2,
             grid = [],
             panePos = this._map._getMapPanePos(),
@@ -135,6 +158,7 @@ L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
             offsetY = panePos.y % cellSize,
             i, len, p, cell, x, y, j, len2, k;
 
+        //console.log(this._latlngs)
         // console.time('process');
         for (i = 0, len = this._latlngs.length; i < len; i++) {
             p = this._map.latLngToContainerPoint(this._latlngs[i]);
@@ -147,16 +171,17 @@ L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
                     this._latlngs[i][2] !== undefined ? +this._latlngs[i][2] : 1;
                 k = alt * v;
 
+
                 grid[y] = grid[y] || [];
                 cell = grid[y][x];
 
                 if (!cell) {
-                    grid[y][x] = [p.x, p.y, k];
+                    grid[y][x] = [p.x, p.y, this._latlngs[i][2]];
 
                 } else {
                     cell[0] = (cell[0] * cell[2] + p.x * k) / (cell[2] + k); // x
                     cell[1] = (cell[1] * cell[2] + p.y * k) / (cell[2] + k); // y
-                    cell[2] += k; // cumulated intensity value
+                    cell[2] = k; // cumulated intensity value
                 }
             }
         }
