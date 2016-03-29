@@ -1,3 +1,5 @@
+var simpleheat = require("simpleheat");
+
 'use strict';
 
 L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
