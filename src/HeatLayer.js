@@ -139,7 +139,7 @@ L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
         //console.log(pixelPerMeter);
         var prut = 10 *(1 / pixelPerMeter);
         //console.log(prut);
-        //this.options.radius = prut;
+        this.options.radius = prut;
         //console.log(this._map.getZoom());
         this._updateOptions();
         var data = [],
