@@ -47,35 +47,25 @@
 	__webpack_require__(2);
 	__webpack_require__(1);
 
-	var map = L.map('map').setView([-37.87, 175.475], 12);
+	var map = L.map('map').setView([41.890239, 12.492335], 16);
 
-	var tiles = L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
+	L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
 	    attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
 	}).addTo(map);
+	addressPoints = [[41.890239, 12.492335]];
+	addressPoints = addressPoints.map(function (p) { return [p[0], p[1], Math.random() * 8, 0.5]; });
 
-	addressPoints = addressPoints.map(function (p) { return [p[0], p[1], Math.random()*8, Math.random()]; });
-
-	var heat = L.heatLayer(addressPoints, {radius: 10, blur: 0, max: 8, gradient: ['blue', 'lime', 'red', 'purple']}).addTo(map);
+	var heat = L.heatLayer(addressPoints, {radius: 70, blur: 0, max: 8, gradient: ['blue', 'lime', 'red', 'purple']}).addTo(map);
 
 
 /***/ },
 /* 1 */
 /***/ function(module, exports, __webpack_require__) {
 
+	'use strict';
 	var simpleheat = __webpack_require__(3);
 
-	'use strict';
-
 	L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
-
-	    // options: {
-	    //     minOpacity: 0.05,
-	    //     maxZoom: 18,
-	    //     radius: 25,
-	    //     blur: 15,
-	    //     max: 1.0
-	    // },
-
 	    initialize: function (latlngs, options) {
 	        this._latlngs = latlngs;
 	        L.setOptions(this, options);
@@ -93,9 +83,6 @@
 
 	    setOptions: function (options) {
 	        L.setOptions(this, options);
-	        if (this._heat) {
-	            this._updateOptions();
-	        }
 	        return this.redraw();
 	    },
 
@@ -153,18 +140,6 @@
 	        L.DomUtil.addClass(canvas, 'leaflet-zoom-' + (animated ? 'animated' : 'hide'));
 
 	        this._heat = simpleheat(canvas);
-	        this._updateOptions();
-	    },
-
-	    _updateOptions: function () {
-	        this._heat.radius(this.options.radius || this._heat.defaultRadius, this.options.blur);
-
-	        if (this.options.gradient) {
-	            this._heat.gradient(this.options.gradient);
-	        }
-	        if (this.options.max) {
-	            this._heat.max(this.options.max);
-	        }
 	    },
 
 	    _reset: function () {
@@ -183,97 +158,37 @@
 	        this._redraw();
 	    },
 
-	    _metresPerPixel: function (lat, zoomLevel) {
-	      // Converts from degrees to radians.
-	      Math.radians = function(degrees) {
-	        return degrees * Math.PI / 180;
-	      };
+	    _metresPerPixel: function () {
+	        var centerLatLng = this._map.getCenter(); // get map center
+	        var pointC = this._map.latLngToContainerPoint(centerLatLng); // convert to containerpoint (pixels)
+	        var pointX = [pointC.x + 1, pointC.y]; // add one pixel to x
+	        // convert containerpoints to latlng's
+	        var latLngC = this._map.containerPointToLatLng(pointC);
+	        var latLngX = this._map.containerPointToLatLng(pointX);
 
-	      // Converts from radians to degrees.
-	      Math.degrees = function(radians) {
-	        return radians * 180 / Math.PI;
-	      };
-	      var C = 40075016.686 / 256; // 256 is the width of a map tile
-	      var cosRes = Math.degrees(Math.cos(Math.radians(lat)))
-	      return C * cosRes / Math.pow(2,(zoomLevel+8))
+	        var distanceX = latLngC.distanceTo(latLngX); // calculate distance between c and x (latitude)
+
+	        return 1 / distanceX;
 	    },
 
 	    _redraw: function () {
-	        var pixelPerMeter =  this._metresPerPixel(this._latlngs[0][0], this._map.getZoom())
-	        //console.log(pixelPerMeter);
-	        var prut = 10 *(1 / pixelPerMeter);
-	        //console.log(prut);
-	        this.options.radius = prut;
-	        //console.log(this._map.getZoom());
-	        this._updateOptions();
-	        var data = [],
-	            r = this._heat._r,
-	            size = this._map.getSize(),
-	            bounds = new L.Bounds(
-	                L.point([-r, -r]),
-	                size.add([r, r])),
+	        var map = this._map;
+	        var latlngs = this._latlngs;
+	        var pixelPerMeter =  this._metresPerPixel();
+	        var radius = this.options.radius * pixelPerMeter;
 
-	            max = this.options.max === undefined ? 1 : this.options.max,
-	            maxZoom = this.options.maxZoom === undefined ? this._map.getMaxZoom() : this.options.maxZoom,
-	            //v = 1 / Math.pow(2, Math.max(0, Math.min(maxZoom - this._map.getZoom(), 12))),
-	            v = 1,
-	            cellSize = r / 2,
-	            grid = [],
-	            panePos = this._map._getMapPanePos(),
-	            offsetX = panePos.x % cellSize,
-	            offsetY = panePos.y % cellSize,
-	            i, len, p, cell, x, y, j, len2, k;
+	        var data = latlngs.map(function (x) {
+	            var point = map.latLngToContainerPoint(L.latLng(x[0], x[1]));
+	            return [
+	                point.x, // x
+	                point.y, // y
+	                x[2], // intensity
+	                x[3] // opacity
+	            ];
+	        });
 
-	        //console.log(this._latlngs)
-	        // console.time('process');
-	        for (i = 0, len = this._latlngs.length; i < len; i++) {
-	            p = this._map.latLngToContainerPoint(this._latlngs[i]);
-	            if (bounds.contains(p)) {
-	                x = Math.floor((p.x - offsetX) / cellSize) + 2;
-	                y = Math.floor((p.y - offsetY) / cellSize) + 2;
-
-	                var alt =
-	                    this._latlngs[i].alt !== undefined ? this._latlngs[i].alt :
-	                    this._latlngs[i][2] !== undefined ? +this._latlngs[i][2] : 1;
-	                k = alt * v;
-
-
-	                grid[y] = grid[y] || [];
-	                cell = grid[y][x];
-
-	                if (!cell) {
-	                    grid[y][x] = [p.x, p.y, this._latlngs[i][2]];
-
-	                } else {
-	                    cell[0] = (cell[0] * cell[2] + p.x * k) / (cell[2] + k); // x
-	                    cell[1] = (cell[1] * cell[2] + p.y * k) / (cell[2] + k); // y
-	                    cell[2] = k; // cumulated intensity value
-	                }
-	            }
-	        }
-
-	        for (i = 0, len = grid.length; i < len; i++) {
-	            if (grid[i]) {
-	                for (j = 0, len2 = grid[i].length; j < len2; j++) {
-	                    cell = grid[i][j];
-	                    if (cell) {
-	                        data.push([
-	                            Math.round(cell[0]),
-	                            Math.round(cell[1]),
-	                            Math.min(cell[2], max),
-	                            this._latlngs[i][3]
-	                        ]);
-	                    }
-	                }
-	            }
-	        }
-	        // console.timeEnd('process');
-
-	        // console.time('draw ' + data.length);
-	        this._heat.data(data).draw(this.options.minOpacity);
-	        // console.timeEnd('draw ' + data.length);
-
-	        this._frame = null;
+	        this._heat.draw(data, radius);
+	        //simpleheat.draw(data, radius);
 	    },
 
 	    _animateZoom: function (e) {
@@ -9490,7 +9405,6 @@
 	    this._height = canvas.height;
 
 	    this._max = 1;
-	    this._data = [];
 	}
 
 	simpleheat.prototype = {
@@ -9505,47 +9419,12 @@
 	        'red'
 	    ],
 
-	    data: function (data) {
-	        this._data = data;
-	        return this;
-	    },
-
 	    max: function (max) {
 	        this._max = max;
 	        return this;
 	    },
 
-	    add: function (point) {
-	        this._data.push(point);
-	        return this;
-	    },
 
-	    clear: function () {
-	        this._data = [];
-	        return this;
-	    },
-
-	    radius: function (r, blur) {
-	        blur = blur === undefined ? 15 : blur;
-
-	        // create a grayscale blurred circle image that we'll use for drawing points
-	        var circle = this._circle = this._createCanvas(),
-	            ctx = circle.getContext('2d'),
-	            r2 = this._r = r + blur;
-
-	        circle.width = circle.height = r2 * 2;
-
-	        ctx.shadowOffsetX = ctx.shadowOffsetY = r2 * 2;
-	        ctx.shadowBlur = blur;
-	        ctx.shadowColor = 'black';
-
-	        ctx.beginPath();
-	        ctx.arc(-r2, -r2, r, 0, Math.PI * 2, true);
-	        ctx.closePath();
-	        ctx.fill();
-
-	        return this;
-	    },
 
 	    resize: function () {
 	        this._width = this._canvas.width;
@@ -9557,61 +9436,37 @@
 	        return this;
 	    },
 
-	    draw: function (minOpacity) {
-
-	        if (!this._circle) this.radius(this.defaultRadius);
-	        //if (!this._grad) this.gradient(this.defaultGradient);
-
+	    draw: function (data, radius) {
+	        var calcColor = this._calcColor;
 	        var grad = this._grad === undefined ? this.defaultGradient : this._grad;
-	        //console.log(this._grad)
-	        //
-	        var gradient = Object.keys(grad).map(function (value,_) {
-	          return grad[value];
-	        });
 
-	        //console.log(gradient)
+	        var gradient = Object.keys(grad).map(function (value) {
+	            return grad[value];
+	        });
 
 	        var ctx = this._ctx;
 
 	        ctx.clearRect(0, 0, this._width, this._height);
-
-	        for (var i = 0, len = this._data.length, p; i < len; i++) {
-	            p = this._data[i];
+	        data.forEach(function (dataPoint) {
 	            ctx.beginPath();
-	            ctx.arc(p[0] - this._r, p[1] - this._r, this._r, 0, 2 * Math.PI, false);
-	            //console.log(p)
-	            ctx.fillStyle = this._calcColor(p[2], gradient, p[3]);
-	            //console.log(ctx.fillStyle)
+	            ctx.arc(dataPoint[0], dataPoint[1], radius, 0, 2 * Math.PI, false);
+	            ctx.fillStyle = calcColor(dataPoint[2], gradient, dataPoint[3], 8); // TODO: maxValue skal ikke være 8
 	            ctx.fill();
-	            //ctx.globalAlpha = Math.max(p[2] / this._max, minOpacity === undefined ? 0.05 : minOpacity);
-	            //ctx.drawImage(this._circle, p[0] - this._r, p[1] - this._r);
-	        };
+	        });
 
 	        return this;
 	    },
 
-	    _calcColor: function (value, gradient, opacity) {
+	    _calcColor: function (value, gradient, opacity, maxValue) {
 	      //console.log("calcColor:" + value)
-	      myRainbow.setSpectrum.apply(this, gradient);
+	        myRainbow.setSpectrum.apply(this, gradient);
 	      //myRainbow.setSpectrum('red', 'yellow', 'white');
-	      myRainbow.setNumberRange(0, 8);
-	      var h = myRainbow.colourAt(value);
-	      return Color("#" + h).alpha(opacity).rgbaString()
+	        myRainbow.setNumberRange(0, maxValue);
+	        var h = myRainbow.colourAt(value);
+	        return Color('#' + h).alpha(opacity).rgbaString();
 	    },
 
-	    _colorize: function (pixels, gradient) {
-	        for (var i = 0, len = pixels.length, j; i < len; i += 4) {
-	            j = pixels[i + 3] * 4; // get gradient color from opacity value
-
-	            if (j) {
-	                pixels[i] = gradient[j];
-	                pixels[i + 1] = gradient[j + 1];
-	                pixels[i + 2] = gradient[j + 2];
-	            }
-	        }
-	    },
-
-	    _createCanvas:function() {
+	    _createCanvas: function () {
 	        if (typeof document !== 'undefined') {
 	            return document.createElement('canvas');
 	        } else {

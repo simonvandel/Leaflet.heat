@@ -1,17 +1,7 @@
-var simpleheat = require("simpleheat");
-
 'use strict';
+var simpleheat = require('simpleheat');
 
 L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
-
-    // options: {
-    //     minOpacity: 0.05,
-    //     maxZoom: 18,
-    //     radius: 25,
-    //     blur: 15,
-    //     max: 1.0
-    // },
-
     initialize: function (latlngs, options) {
         this._latlngs = latlngs;
         L.setOptions(this, options);
@@ -29,9 +19,6 @@ L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
 
     setOptions: function (options) {
         L.setOptions(this, options);
-        if (this._heat) {
-            this._updateOptions();
-        }
         return this.redraw();
     },
 
@@ -89,18 +76,6 @@ L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
         L.DomUtil.addClass(canvas, 'leaflet-zoom-' + (animated ? 'animated' : 'hide'));
 
         this._heat = simpleheat(canvas);
-        this._updateOptions();
-    },
-
-    _updateOptions: function () {
-        this._heat.radius(this.options.radius || this._heat.defaultRadius, this.options.blur);
-
-        if (this.options.gradient) {
-            this._heat.gradient(this.options.gradient);
-        }
-        if (this.options.max) {
-            this._heat.max(this.options.max);
-        }
     },
 
     _reset: function () {
@@ -119,97 +94,37 @@ L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
         this._redraw();
     },
 
-    _metresPerPixel: function (lat, zoomLevel) {
-      // Converts from degrees to radians.
-      Math.radians = function(degrees) {
-        return degrees * Math.PI / 180;
-      };
+    _metresPerPixel: function () {
+        var centerLatLng = this._map.getCenter(); // get map center
+        var pointC = this._map.latLngToContainerPoint(centerLatLng); // convert to containerpoint (pixels)
+        var pointX = [pointC.x + 1, pointC.y]; // add one pixel to x
+        // convert containerpoints to latlng's
+        var latLngC = this._map.containerPointToLatLng(pointC);
+        var latLngX = this._map.containerPointToLatLng(pointX);
 
-      // Converts from radians to degrees.
-      Math.degrees = function(radians) {
-        return radians * 180 / Math.PI;
-      };
-      var C = 40075016.686 / 256; // 256 is the width of a map tile
-      var cosRes = Math.degrees(Math.cos(Math.radians(lat)))
-      return C * cosRes / Math.pow(2,(zoomLevel+8))
+        var distanceX = latLngC.distanceTo(latLngX); // calculate distance between c and x (latitude)
+
+        return 1 / distanceX;
     },
 
     _redraw: function () {
-        var pixelPerMeter =  this._metresPerPixel(this._latlngs[0][0], this._map.getZoom())
-        //console.log(pixelPerMeter);
-        var prut = 10 *(1 / pixelPerMeter);
-        //console.log(prut);
-        this.options.radius = prut;
-        //console.log(this._map.getZoom());
-        this._updateOptions();
-        var data = [],
-            r = this._heat._r,
-            size = this._map.getSize(),
-            bounds = new L.Bounds(
-                L.point([-r, -r]),
-                size.add([r, r])),
+        var map = this._map;
+        var latlngs = this._latlngs;
+        var pixelPerMeter =  this._metresPerPixel();
+        var radius = this.options.radius * pixelPerMeter;
 
-            max = this.options.max === undefined ? 1 : this.options.max,
-            maxZoom = this.options.maxZoom === undefined ? this._map.getMaxZoom() : this.options.maxZoom,
-            //v = 1 / Math.pow(2, Math.max(0, Math.min(maxZoom - this._map.getZoom(), 12))),
-            v = 1,
-            cellSize = r / 2,
-            grid = [],
-            panePos = this._map._getMapPanePos(),
-            offsetX = panePos.x % cellSize,
-            offsetY = panePos.y % cellSize,
-            i, len, p, cell, x, y, j, len2, k;
+        var data = latlngs.map(function (x) {
+            var point = map.latLngToContainerPoint(L.latLng(x[0], x[1]));
+            return [
+                point.x, // x
+                point.y, // y
+                x[2], // intensity
+                x[3] // opacity
+            ];
+        });
 
-        //console.log(this._latlngs)
-        // console.time('process');
-        for (i = 0, len = this._latlngs.length; i < len; i++) {
-            p = this._map.latLngToContainerPoint(this._latlngs[i]);
-            if (bounds.contains(p)) {
-                x = Math.floor((p.x - offsetX) / cellSize) + 2;
-                y = Math.floor((p.y - offsetY) / cellSize) + 2;
-
-                var alt =
-                    this._latlngs[i].alt !== undefined ? this._latlngs[i].alt :
-                    this._latlngs[i][2] !== undefined ? +this._latlngs[i][2] : 1;
-                k = alt * v;
-
-
-                grid[y] = grid[y] || [];
-                cell = grid[y][x];
-
-                if (!cell) {
-                    grid[y][x] = [p.x, p.y, this._latlngs[i][2]];
-
-                } else {
-                    cell[0] = (cell[0] * cell[2] + p.x * k) / (cell[2] + k); // x
-                    cell[1] = (cell[1] * cell[2] + p.y * k) / (cell[2] + k); // y
-                    cell[2] = k; // cumulated intensity value
-                }
-            }
-        }
-
-        for (i = 0, len = grid.length; i < len; i++) {
-            if (grid[i]) {
-                for (j = 0, len2 = grid[i].length; j < len2; j++) {
-                    cell = grid[i][j];
-                    if (cell) {
-                        data.push([
-                            Math.round(cell[0]),
-                            Math.round(cell[1]),
-                            Math.min(cell[2], max),
-                            this._latlngs[i][3]
-                        ]);
-                    }
-                }
-            }
-        }
-        // console.timeEnd('process');
-
-        // console.time('draw ' + data.length);
-        this._heat.data(data).draw(this.options.minOpacity);
-        // console.timeEnd('draw ' + data.length);
-
-        this._frame = null;
+        this._heat.draw(data, radius);
+        //simpleheat.draw(data, radius);
     },
 
     _animateZoom: function (e) {
