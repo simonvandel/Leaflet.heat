@@ -196,7 +196,8 @@ L.HeatLayer = (L.Layer ? L.Layer : L.Class).extend({
                         data.push([
                             Math.round(cell[0]),
                             Math.round(cell[1]),
-                            Math.min(cell[2], max)
+                            Math.min(cell[2], max),
+                            this._latlngs[i][3]
                         ]);
                     }
                 }
